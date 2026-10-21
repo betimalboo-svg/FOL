@@ -1,0 +1,11 @@
+FOL – iPhone ohne ZIP
+
+Lade diese Dateien einzeln herunter und anschließend gemeinsam in ein neues GitHub-Repository hoch:
+- App.tsx
+- app.json
+- eas.json
+- package.json
+- tsconfig.json
+- icon.png
+
+Danach kannst du das Repository über Expo Launch / EAS für iOS bauen und zu TestFlight bringen.

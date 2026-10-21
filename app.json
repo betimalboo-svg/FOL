@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "FOL",
+    "slug": "fol-language-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.betim.fol",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "icon": "./icon.png"
+    },
+    "android": {
+      "package": "com.fol.language"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "scheme": "fol",
+    "icon": "./icon.png"
+  }
+}
