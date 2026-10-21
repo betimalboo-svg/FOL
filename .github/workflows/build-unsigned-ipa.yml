@@ -14,10 +14,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -25,12 +25,12 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Generate the iOS project
-        run: npx expo prebuild --platform ios --non-interactive
+        run: CI=1 npx expo prebuild --platform ios
 
       - name: Install CocoaPods dependencies
         run: pod install --project-directory=ios
 
-      - name: Detect Xcode workspace and scheme
+      - name: Detect Xcode workspace and app scheme
         id: xcode
         shell: bash
         run: |
@@ -41,17 +41,18 @@ jobs:
             exit 1
           fi
 
+          app_name="$(node -p "require('./app.json').expo.name")"
           scheme="$(xcodebuild -workspace "$workspace" -list -json \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["workspace"]["schemes"][0])')"
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d["workspace"]["schemes"]; app=sys.argv[1]; print(app if app in schemes else "")' "$app_name")"
           if [[ -z "$scheme" ]]; then
-            echo "No Xcode scheme found in $workspace"
+            echo "No Xcode scheme matches Expo app name: $app_name"
             exit 1
           fi
 
           echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
           echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
           echo "Using workspace: $workspace"
-          echo "Using scheme: $scheme"
+          echo "Using app scheme: $scheme"
 
       - name: Build for iOS without code signing
         run: |
@@ -71,9 +72,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          app_path="$(find "$RUNNER_TEMP/fol-derived-data/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print -quit)"
+          app_path="$(find "$RUNNER_TEMP/fol-derived-data/Build/Products/Release-iphoneos" -type d -name '*.app' -print -quit)"
           if [[ -z "$app_path" ]]; then
-            echo "No .app bundle was produced"
+            echo "No .app bundle was produced under Release-iphoneos"
             exit 1
           fi
 
