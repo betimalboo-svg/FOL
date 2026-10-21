@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -9,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
 type Language = 'de' | 'sq';
 type Tab = 'translate' | 'practice' | 'progress';
@@ -196,13 +199,97 @@ function AppHeader() {
 function TranslateScreen() {
   const [from, setFrom] = useState<Language>('de');
   const [to, setTo] = useState<Language>('sq');
-  const [input, setInput] = useState('Ich bin immer noch am warten');
-  const result = useMemo(() => offlineTranslate(input, from, to), [input, from, to]);
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [apiKeyDraft, setApiKeyDraft] = useState('');
+  const [showKeySetup, setShowKeySetup] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    SecureStore.getItemAsync('folGoogleTranslateApiKey')
+      .then((savedKey) => setApiKey(savedKey ?? ''))
+      .catch(() => setError('Der gespeicherte API-Schlüssel konnte nicht geladen werden.'));
+  }, []);
 
   const swap = () => {
     setFrom(to);
     setTo(from);
-    if (result && !result.startsWith('Noch nicht')) setInput(result);
+    if (result) setInput(result);
+    setResult('');
+    setError('');
+  };
+
+  const saveApiKey = async () => {
+    const trimmedKey = apiKeyDraft.trim();
+    if (!trimmedKey) {
+      setError('Bitte gib zuerst deinen Google-Cloud-API-Schlüssel ein.');
+      return;
+    }
+    try {
+      await SecureStore.setItemAsync('folGoogleTranslateApiKey', trimmedKey);
+      setApiKey(trimmedKey);
+      setApiKeyDraft('');
+      setShowKeySetup(false);
+      setError('');
+    } catch {
+      setError('Der API-Schlüssel konnte nicht sicher auf diesem iPhone gespeichert werden.');
+    }
+  };
+
+  const removeApiKey = async () => {
+    await SecureStore.deleteItemAsync('folGoogleTranslateApiKey');
+    setApiKey('');
+    setResult('');
+    setError('');
+  };
+
+  const translate = async () => {
+    if (!input.trim()) {
+      setError('Schreib zuerst einen Text zum Übersetzen.');
+      return;
+    }
+    if (!apiKey) {
+      setApiKeyDraft('');
+      setShowKeySetup(true);
+      return;
+    }
+
+    setIsTranslating(true);
+    setError('');
+    setResult('');
+    try {
+      const response = await fetch('https://translation.googleapis.com/language/translate/v2', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Ios-Bundle-Identifier': 'com.betim.fol',
+        },
+        body: JSON.stringify({ q: input.trim(), source: from, target: to, format: 'text' }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? 'Google Cloud Translation hat die Anfrage abgelehnt.');
+      }
+      const translated = payload?.data?.translations?.[0]?.translatedText;
+      if (typeof translated !== 'string' || !translated.trim()) {
+        throw new Error('Google hat keine Übersetzung zurückgegeben.');
+      }
+      setResult(translated
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&#39;/g, "'")
+        .replace(/&quot;/g, '"'));
+    } catch (translationError) {
+      setError(translationError instanceof Error
+        ? translationError.message
+        : 'Keine Verbindung zu Google Cloud Translation. Prüfe deine Internetverbindung.');
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   const examples = from === 'de'
@@ -213,7 +300,7 @@ function TranslateScreen() {
     <ScrollView contentContainerStyle={styles.screenContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.eyebrow}>FOL TRANSLATOR</Text>
       <Text style={styles.h1}>Sag es richtig.</Text>
-      <Text style={styles.subhead}>Deutsch ↔ Albanisch, mit Fokus auf natürliche Alltagssprache.</Text>
+      <Text style={styles.subhead}>Deutsch ↔ Albanisch mit Google Cloud Translation. Bei Kosovo-Slang kann die Übersetzung abweichen.</Text>
 
       <View style={styles.languageRow}>
         <Pill label={from === 'de' ? '🇩🇪 Deutsch' : '🇦🇱 Albanisch'} active />
@@ -221,12 +308,23 @@ function TranslateScreen() {
         <Pill label={to === 'sq' ? '🇦🇱 Albanisch' : '🇩🇪 Deutsch'} active />
       </View>
 
+      <View style={styles.apiKeyRow}>
+        <View style={styles.apiKeyStatus}>
+          <Text style={styles.apiKeyTitle}>Google-Übersetzung</Text>
+          <Text style={styles.smallMuted}>{apiKey ? 'API-Schlüssel auf diesem iPhone gespeichert' : 'Einmalige Einrichtung erforderlich'}</Text>
+        </View>
+        <TouchableOpacity onPress={() => { setApiKeyDraft(''); setShowKeySetup(true); }}>
+          <Text style={styles.clear}>{apiKey ? 'Ändern' : 'Einrichten'}</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.card}>
         <Text style={styles.cardLabel}>DEIN TEXT</Text>
         <TextInput
           value={input}
-          onChangeText={setInput}
+          onChangeText={(text) => { setInput(text); setResult(''); setError(''); }}
           multiline
+          maxLength={240}
           placeholder="Schreib etwas …"
           placeholderTextColor={COLORS.muted}
           style={styles.input}
@@ -237,14 +335,47 @@ function TranslateScreen() {
         </View>
       </View>
 
+      <TouchableOpacity onPress={translate} disabled={isTranslating} activeOpacity={0.85} style={[styles.primaryButton, isTranslating && styles.buttonDisabled]}>
+        {isTranslating
+          ? <ActivityIndicator color={COLORS.white} />
+          : <Text style={styles.primaryButtonText}>Übersetzen</Text>}
+      </TouchableOpacity>
+
       <View style={[styles.card, styles.resultCard]}>
         <View style={styles.resultTop}>
           <Text style={styles.cardLabel}>ÜBERSETZUNG</Text>
-          <View style={styles.betaBadge}><Text style={styles.betaText}>OFFLINE BETA</Text></View>
+          <View style={styles.betaBadge}><Text style={styles.betaText}>GOOGLE CLOUD</Text></View>
         </View>
-        <Text style={styles.translation}>{result || 'Die Übersetzung erscheint hier.'}</Text>
-        <Text style={styles.dialectHint}>💬 Kosovo-Alltagssprache wird bei passenden Sätzen bevorzugt.</Text>
+        <Text style={styles.translation}>{result || (isTranslating ? 'Übersetzung wird erstellt …' : 'Schreib einen Text und tippe auf „Übersetzen“.')}</Text>
+        {!!error && <Text style={styles.translationError}>{error}</Text>}
+        <Text style={styles.dialectHint}>💬 Übersetzung von Google Cloud. Umgangssprache kann anders ausfallen.</Text>
       </View>
+
+      <Modal visible={showKeySetup} transparent animationType="fade" onRequestClose={() => setShowKeySetup(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.infoTitle}>Google Cloud API-Schlüssel</Text>
+            <Text style={styles.infoText}>Füge deinen Schlüssel hier ein. Er wird verschlüsselt auf diesem iPhone gespeichert und nicht in die IPA geschrieben. Beschränke ihn in Google Cloud auf „Cloud Translation API“ und die App-ID com.betim.fol. Teile die IPA nicht: App-Einschränkungen sind kein vollständiger Schutz vor Missbrauch.</Text>
+            <TextInput
+              value={apiKeyDraft}
+              onChangeText={setApiKeyDraft}
+              placeholder="API-Schlüssel"
+              placeholderTextColor={COLORS.muted}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.keyInput}
+            />
+            <TouchableOpacity onPress={saveApiKey} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Sicher speichern</Text>
+            </TouchableOpacity>
+            {apiKey ? <TouchableOpacity onPress={removeApiKey} style={styles.modalSecondaryButton}><Text style={styles.clear}>Schlüssel entfernen</Text></TouchableOpacity> : null}
+            <TouchableOpacity onPress={() => { setShowKeySetup(false); setApiKeyDraft(''); }} style={styles.modalSecondaryButton}>
+              <Text style={styles.smallMuted}>Abbrechen</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Text style={styles.sectionTitle}>Schnell ausprobieren</Text>
       <View style={styles.chipsWrap}>
@@ -419,6 +550,9 @@ const styles = StyleSheet.create({
   h1: { color: COLORS.text, fontSize: 36, lineHeight: 40, fontWeight: '900', letterSpacing: -1.2 },
   subhead: { color: COLORS.muted, fontSize: 15, lineHeight: 22, marginTop: 9, marginBottom: 24 },
   languageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  apiKeyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
+  apiKeyStatus: { flex: 1, paddingRight: 12 },
+  apiKeyTitle: { color: COLORS.text, fontSize: 13, fontWeight: '800', marginBottom: 3 },
   pill: { flex: 1, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border },
   pillActive: { borderColor: '#3A3A42' },
   pillText: { color: COLORS.muted, fontWeight: '700', textAlign: 'center', fontSize: 13 },
@@ -432,6 +566,7 @@ const styles = StyleSheet.create({
   smallMuted: { color: COLORS.muted, fontSize: 12 },
   clear: { color: COLORS.red, fontSize: 12, fontWeight: '700' },
   resultCard: { backgroundColor: '#181315', borderColor: '#48232A' },
+  translationError: { color: '#FF8294', fontSize: 13, lineHeight: 19, marginTop: 10 },
   resultTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   betaBadge: { backgroundColor: '#3A171E', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
   betaText: { color: '#FF8294', fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
@@ -463,6 +598,10 @@ const styles = StyleSheet.create({
   primaryButton: { marginTop: 18, backgroundColor: COLORS.red, borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
   buttonDisabled: { opacity: 0.35 },
   primaryButtonText: { color: COLORS.white, fontSize: 15, fontWeight: '900' },
+  modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.78)' },
+  modalCard: { width: '100%', maxWidth: 440, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 20, padding: 20 },
+  keyInput: { color: COLORS.text, fontSize: 15, padding: 14, marginTop: 16, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, backgroundColor: COLORS.bg },
+  modalSecondaryButton: { alignItems: 'center', padding: 12 },
   heroStat: { backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 22, padding: 22, alignItems: 'center' },
   heroStatNumber: { color: COLORS.text, fontSize: 54, fontWeight: '900', letterSpacing: -2 },
   heroStatLabel: { color: COLORS.muted, fontSize: 12, marginBottom: 18 },
@@ -483,3 +622,4 @@ const styles = StyleSheet.create({
   tabText: { color: COLORS.muted, fontSize: 10, fontWeight: '700', marginTop: 2 },
   tabActive: { color: COLORS.red },
 });
+
