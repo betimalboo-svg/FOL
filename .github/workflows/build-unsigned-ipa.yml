@@ -1,0 +1,91 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install JavaScript dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Generate the iOS project
+        run: npx expo prebuild --platform ios --non-interactive
+
+      - name: Install CocoaPods dependencies
+        run: pod install --project-directory=ios
+
+      - name: Detect Xcode workspace and scheme
+        id: xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          if [[ -z "$workspace" ]]; then
+            echo "No Xcode workspace found under ios/"
+            exit 1
+          fi
+
+          scheme="$(xcodebuild -workspace "$workspace" -list -json \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["workspace"]["schemes"][0])')"
+          if [[ -z "$scheme" ]]; then
+            echo "No Xcode scheme found in $workspace"
+            exit 1
+          fi
+
+          echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
+          echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
+          echo "Using workspace: $workspace"
+          echo "Using scheme: $scheme"
+
+      - name: Build for iOS without code signing
+        run: |
+          xcodebuild \
+            -workspace "${{ steps.xcode.outputs.workspace }}" \
+            -scheme "${{ steps.xcode.outputs.scheme }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/fol-derived-data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="$(find "$RUNNER_TEMP/fol-derived-data/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print -quit)"
+          if [[ -z "$app_path" ]]; then
+            echo "No .app bundle was produced"
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$app_path" "$RUNNER_TEMP/ipa/Payload/"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/ipa/Payload" FOL-unsigned.ipa
+          ls -lh FOL-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FOL-unsigned.ipa
+          path: FOL-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
