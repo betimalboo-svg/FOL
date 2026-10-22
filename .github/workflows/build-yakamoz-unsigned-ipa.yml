@@ -1,0 +1,41 @@
+name: Yakamoz unsigned iOS IPA
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/yakamoz-dating/**'
+      - '.github/workflows/build-yakamoz-unsigned-ipa.yml'
+  workflow_dispatch:
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install JavaScript dependencies
+        working-directory: apps/yakamoz-dating
+        run: npm install --no-audit --no-fund
+      - name: Generate iOS project
+        working-directory: apps/yakamoz-dating
+        run: npx expo prebuild --platform ios --non-interactive
+      - name: Install CocoaPods
+        working-directory: apps/yakamoz-dating/ios
+        run: pod install
+      - name: Build unsigned iOS app
+        working-directory: apps/yakamoz-dating
+        run: |
+          xcodebuild -workspace ios/Yakamoz.xcworkspace -scheme Yakamoz -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Yakamoz.app Payload/
+          /usr/bin/zip -qry Yakamoz-unsigned.ipa Payload
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yakamoz-unsigned-IPA
+          path: apps/yakamoz-dating/Yakamoz-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
