@@ -210,7 +210,7 @@ struct DiagnosticImportView: View {
                         isImporting = true
                     } label: {
                         Label("Diagnosedateien auswählen", systemImage: "square.and.arrow.down")
-                            .fontWeight(.semibold())
+                            .fontWeight(.semibold)
                             .frame(maxWidth: .infinity).padding(14)
                     }
                     .buttonStyle(.borderedProminent).tint(.blue)
@@ -234,7 +234,7 @@ struct DiagnosticImportView: View {
                                 HStack(alignment: .top) {
                                     Text(finding.label).foregroundStyle(.white.opacity(0.7))
                                     Spacer(minLength: 8)
-                                    Text(finding.value).fontWeight(.semibold()).multilineTextAlignment(.trailing)
+                                    Text(finding.value).fontWeight(.semibold).multilineTextAlignment(.trailing)
                                 }
                                 .font(.subheadline)
                                 Text(finding.confidence + " · " + finding.detail)
