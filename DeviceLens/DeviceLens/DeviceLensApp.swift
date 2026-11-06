@@ -300,16 +300,21 @@ struct DeviceLensView: View {
             .tabItem { Label("Hardware",systemImage:"cpu") }
 
             NavigationStack {
+                DiagnosticImportView()
+            }
+            .tabItem { Label("Diagnose",systemImage:"doc.text.magnifyingglass") }
+
+            NavigationStack {
                 ScrollView {
                     VStack(alignment:.leading,spacing:16) {
                         HardwareCard(label:"Hinweise",symbol:"info.circle",tint:.cyan) {
                             Text("DeviceLens erkennt das iPhone durch seine Hardwarekennung. LIVE-Werte kommen aus System-APIs, MODELL-Werte aus der eingebauten Modellliste.")
-                            Text("Apple erlaubt gewöhnlichen Apps nicht, den Hersteller des tatsächlich verbauten Displays, NAND- oder RAM-Chips oder die Geräteseriennummer auszulesen. Diese Angaben werden deshalb nicht erfunden.")
+                            Text("Apple erlaubt gewöhnlichen Apps nicht, den Hersteller des tatsächlich verbauten Displays, NAND- oder RAM-Chips oder die Geräteseriennummer auszulesen. Diese Angaben werden deshalb nicht erfunden. Unter Diagnose kannst du vorhandene Analysedateien lokal auf Hardware-Hinweise prüfen lassen.")
                         }
                         HardwareCard(label:"Datenschutz",symbol:"lock.shield",tint:.green) {
                             Text("Alle Daten bleiben auf dem Gerät. Es gibt keine Accounts, Werbung oder Internetabfragen.")
                         }
-                        Text("Version 1.0").foregroundStyle(.gray).font(.footnote)
+                        Text("Version 1.1").foregroundStyle(.gray).font(.footnote)
                     }.padding(16)
                 }.background(bg)
                 .navigationTitle("Über die App")
