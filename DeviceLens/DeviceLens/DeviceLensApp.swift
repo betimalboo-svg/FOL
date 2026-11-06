@@ -111,6 +111,7 @@ struct HardwareSnapshot {
         switch screen.traitCollection.displayGamut {
         case .P3: gamut = "P3"
         case .SRGB: gamut = "sRGB"
+        case .unspecified: gamut = "Unbekannt"
         @unknown default: gamut = "Unbekannt"
         }
         return .init(
