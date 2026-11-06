@@ -1,0 +1,25 @@
+name: DeviceLens
+options:
+  bundleIdPrefix: de.handyretter
+  deploymentTarget:
+    iOS: '16.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    IPHONEOS_DEPLOYMENT_TARGET: '16.0'
+    TARGETED_DEVICE_FAMILY: '1'
+    GENERATE_INFOPLIST_FILE: YES
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGN_STYLE: Manual
+targets:
+  DeviceLens:
+    type: application
+    platform: iOS
+    sources:
+      - path: DeviceLens
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.handyretter.devicelens
+        INFOPLIST_KEY_CFBundleDisplayName: DeviceLens
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        SUPPORTS_MACCATALYST: NO

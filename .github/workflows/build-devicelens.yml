@@ -1,0 +1,45 @@
+name: DeviceLens unsigned IPA
+on:
+  push:
+    branches: [devicelens-ipa]
+    paths:
+      - 'DeviceLens/**'
+      - '.github/workflows/build-devicelens.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec DeviceLens/project.yml
+      - name: Build unsigned app
+        run: |
+          xcodebuild -project DeviceLens/DeviceLens.xcodeproj -scheme DeviceLens \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DeviceLensDerived" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            clean build
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/DeviceLensDerived/Build/Products/Release-iphoneos/DeviceLens.app"
+          test -d "$app"
+          mkdir -p "$RUNNER_TEMP/package/Payload"
+          cp -R "$app" "$RUNNER_TEMP/package/Payload/"
+          (cd "$RUNNER_TEMP/package" && zip -qr "$GITHUB_WORKSPACE/DeviceLens-unsigned.ipa" Payload)
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeviceLens-unsigned
+          path: DeviceLens-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
